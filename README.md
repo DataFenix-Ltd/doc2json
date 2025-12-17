@@ -1,5 +1,7 @@
 # doc2json
 
+> **Beta** - Actively developed and used in production, but APIs may change. [Feedback welcome!](https://github.com/DataFenix-Ltd/doc2json/issues)
+
 **Your documents are unique. Your extraction tool should be too.**
 
 Every industry has documents that generic AI tools don't understand. Legal contracts with jurisdiction-specific clauses. Medical intake forms with diagnosis codes. Invoices with VAT breakdowns. Shipping manifests with customs classifications.
