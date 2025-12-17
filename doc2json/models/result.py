@@ -45,6 +45,10 @@ class Assessment(BaseModel):
 class ExtractionResult(BaseModel):
     """Wrapper for extraction results with optional assessment."""
 
+    extraction_id: Optional[str] = Field(
+        default=None,
+        description="Unique ID for linking to metadata and layout"
+    )
     source_file: str = Field(description="Name of the source file")
     schema_name: str = Field(description="Name of the schema used")
     schema_version: str = Field(description="Version of the schema used")
@@ -73,6 +77,10 @@ class ExtractionResult(BaseModel):
             "_schema": self.schema_name,
             "_schema_version": self.schema_version,
         }
+
+        # Add extraction_id if present (for linking to metadata/layout)
+        if self.extraction_id:
+            result["_extraction_id"] = self.extraction_id
 
         if self.error:
             result["_error"] = self.error

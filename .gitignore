@@ -29,3 +29,11 @@ CLAUDE.md
 
 # todos
 TODO.md
+
+# Debug output
+debug/
+debug_output/
+debug_output2/
+
+# Dev scripts
+scripts/

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
@@ -77,7 +78,6 @@ class SchemaTool:
             model=llm_config.model,
             base_url=llm_config.base_url,
             api_key=llm_config.api_key,
-            api_version=llm_config.api_version,
         )
 
         # Get source and destination connectors
@@ -109,6 +109,7 @@ class SchemaTool:
             for doc_ref in source.iter_documents():
                 self.logger.info(f"Processing: {doc_ref.name}")
                 file_started = datetime.now()
+                extraction_id = str(uuid.uuid4())  # Generate ID early for linking
                 extract_tokens = None
                 assess_tokens = None
                 doc_info = None
@@ -142,6 +143,7 @@ class SchemaTool:
 
                     # Build result
                     result = ExtractionResult(
+                        extraction_id=extraction_id,
                         source_file=doc_ref.name,
                         schema_name=schema_name,
                         schema_version=schema_version,
@@ -175,6 +177,16 @@ class SchemaTool:
                         f"Document too large: {doc_ref.name} "
                         f"({e.char_count:,} chars, limit: {e.max_chars:,})"
                     )
+                    error_result = ExtractionResult(
+                        extraction_id=extraction_id,
+                        source_file=doc_ref.name,
+                        schema_name=schema_name,
+                        schema_version=schema_version,
+                        data={},
+                        error=error_msg,
+                    )
+                    results.append(error_result)
+                    destination.write_record(error_result.to_output_dict())
                     run_meta.files_failed += 1
 
                 except EmptyDocumentError as e:
@@ -183,14 +195,34 @@ class SchemaTool:
                         f"Empty document skipped: {doc_ref.name} "
                         f"(no extractable text content)"
                     )
+                    error_result = ExtractionResult(
+                        extraction_id=extraction_id,
+                        source_file=doc_ref.name,
+                        schema_name=schema_name,
+                        schema_version=schema_version,
+                        data={},
+                        error=error_msg,
+                    )
+                    results.append(error_result)
+                    destination.write_record(error_result.to_output_dict())
                     run_meta.files_failed += 1
 
                 except Exception as e:
                     error_msg = str(e)
                     self.logger.error(f"Failed to process {doc_ref.name}: {e}")
+                    error_result = ExtractionResult(
+                        extraction_id=extraction_id,
+                        source_file=doc_ref.name,
+                        schema_name=schema_name,
+                        schema_version=schema_version,
+                        data={},
+                        error=error_msg,
+                    )
+                    results.append(error_result)
+                    destination.write_record(error_result.to_output_dict())
                     run_meta.files_failed += 1
 
-                # Record per-file metadata
+                    # Record per-file metadata
                 file_completed = datetime.now()
                 file_meta = ExtractionMetadata(
                     source_file=doc_ref.name,
@@ -209,6 +241,41 @@ class SchemaTool:
                 run_meta.extractions.append(file_meta)
                 run_meta.files_processed += 1
 
+                # Layout Extraction (Integrated)
+                if schema_config.layout and schema_config.layout.enabled:
+                    try:
+                        self.logger.info(f"Running layout extraction for {doc_ref.name}")
+                        # Lazy import to avoid heavy dependencies if not used
+                        from doc2json.layout import LayoutExtractor, GeminiVLMClient
+
+                        vlm_client = None
+                        if schema_config.layout.use_vlm:
+                            api_key = llm_config.api_key or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+                            if api_key:
+                                vlm_client = GeminiVLMClient(api_key=api_key)
+                            else:
+                                self.logger.warning("VLM enabled but no API key found (checked GOOGLE_API_KEY, GEMINI_API_KEY). Skipping style extraction.")
+
+                        extractor = LayoutExtractor()
+                        layout_result = extractor.process(
+                            str(file_path),
+                            vlm_client=vlm_client,
+                            extraction_id=extraction_id  # Link to extraction record
+                        )
+
+                        # Save layout output to outputs/<schema>/layout/<filename>.json
+                        output_dir = Path(schema_config.output_path).parent / "layout"
+                        output_dir.mkdir(parents=True, exist_ok=True)
+
+                        layout_path = output_dir / f"{doc_ref.name}.json"
+                        with open(layout_path, "w") as f:
+                            json.dump(layout_result, f, indent=2)
+
+                        self.logger.info(f"Saved layout to {layout_path}")
+
+                    except Exception as e:
+                        self.logger.error(f"Layout extraction failed for {doc_ref.name}: {e}")
+            
             # Finalize run metadata
             run_meta.completed_at = datetime.now()
 

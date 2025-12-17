@@ -47,9 +47,16 @@ class DestinationConfig:
 
 
 @dataclass
+class LayoutConfig:
+    """Configuration for layout extraction."""
+    enabled: bool = False
+    use_vlm: bool = False
+
+
+@dataclass
 class SchemaConfig:
     """Configuration for a schema extraction pipeline.
-
+    
     Convention: schema name determines paths:
     - Schema file: schemas/<name>.py
     - Sources: sources/<name>/ (default, if no source override)
@@ -61,6 +68,7 @@ class SchemaConfig:
     max_chars: int = MAX_CHARS_DEFAULT  # Character limit for extraction
     source: Optional[SourceConfig] = None  # Override global source
     destination: Optional[DestinationConfig] = None  # Override global destination
+    layout: Optional[LayoutConfig] = None  # Layout extraction config
 
     @property
     def schema_path(self) -> str:
@@ -306,6 +314,16 @@ def _parse_schemas(data: dict) -> list[SchemaConfig]:
                 # Parse per-schema source/destination overrides
                 source_override = _parse_connector_config(item.get("source"))
                 dest_override = _parse_connector_config(item.get("destination"))
+                
+                # Parse layout config
+                layout_config = None
+                if "layout" in item:
+                    layout_data = item["layout"]
+                    if isinstance(layout_data, dict):
+                        layout_config = LayoutConfig(
+                            enabled=layout_data.get("enabled", False),
+                            use_vlm=layout_data.get("use_vlm", False),
+                        )
 
                 schemas.append(SchemaConfig(
                     name=item["name"],
@@ -314,6 +332,7 @@ def _parse_schemas(data: dict) -> list[SchemaConfig]:
                     max_chars=item.get("max_chars", MAX_CHARS_DEFAULT),
                     source=source_override,
                     destination=dest_override,
+                    layout=layout_config,
                 ))
             else:
                 raise ConfigError(

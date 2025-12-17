@@ -12,6 +12,10 @@ from doc2json.core.engine import SchemaTool
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 # Example schema template created by init
 DEFAULT_SCHEMA_TEMPLATE = '''"""Example schema for doc2json.
 
@@ -314,6 +318,107 @@ def accept_suggestion(schema):
         _accept_schema_suggestion(config, schema_config.name)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
+
+
+@cli.command()
+@click.argument("path", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), help="Output file path (default: <input>.layout.json)")
+@click.option("--no-vlm", is_flag=True, help="Disable VLM style extraction (enabled by default for images)")
+@click.option("--vlm-model", default="gemini-3-pro-preview", help="VLM model to use (default: gemini-3-pro-preview)")
+@click.option("--debug", "-d", type=click.Path(), help="Save debug images to this directory")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed progress")
+def layout(path, output, no_vlm, vlm_model, debug, verbose):
+    """Extract layout from a document.
+
+    Detects document structure (titles, paragraphs, tables, images) and
+    outputs bounding boxes with style information.
+
+    For images/scans, VLM is used automatically for style extraction
+    (requires GOOGLE_API_KEY in .env file).
+
+    Examples:
+
+        doc2json layout invoice.pdf
+
+        doc2json layout scan.png
+
+        doc2json layout scan.png --no-vlm  # Skip VLM style extraction
+
+        doc2json layout report.pdf -o layout.json -v
+    """
+    import json
+    from pathlib import Path as PathLib
+
+    # Set logging level based on verbose flag
+    if verbose:
+        logging.getLogger("doc2json.layout").setLevel(logging.DEBUG)
+        logging.getLogger("doc2json.layout").addHandler(logging.StreamHandler())
+
+    try:
+        # Lazy import to avoid loading heavy dependencies unless needed
+        from doc2json.layout import LayoutExtractor, GeminiVLMClient
+
+        input_path = PathLib(path)
+
+        # Determine output path
+        if output:
+            output_path = PathLib(output)
+        else:
+            output_path = input_path.with_suffix(input_path.suffix + ".layout.json")
+
+        click.echo(f"Extracting layout from: {input_path}")
+
+        # Check if this is an image file (needs VLM for style extraction)
+        image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp"}
+        is_image = input_path.suffix.lower() in image_extensions
+
+        # Initialize VLM client for images (unless disabled)
+        vlm_client = None
+        if is_image and not no_vlm:
+            api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            if api_key:
+                click.echo(f"Using VLM for style extraction ({vlm_model})")
+                vlm_client = GeminiVLMClient(api_key=api_key, model_name=vlm_model)
+            else:
+                click.echo("Note: Set GOOGLE_API_KEY in .env for style extraction from images")
+
+        # Run extraction
+        click.echo("Loading models...")
+        extractor = LayoutExtractor()
+        result = extractor.process(str(input_path), vlm_client=vlm_client, debug_dir=debug)
+
+        # Write output
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(result, f, indent=2)
+
+        # Summary
+        page_count = result.get("metadata", {}).get("page_count", 0)
+        element_count = sum(len(p.get("elements", [])) for p in result.get("pages", []))
+        origin_type = result.get("metadata", {}).get("origin_type", "unknown")
+
+        # Count elements with text
+        text_count = sum(
+            1 for p in result.get("pages", [])
+            for el in p.get("elements", [])
+            if el.get("text_content")
+        )
+
+        click.echo(f"\nLayout extraction complete:")
+        click.echo(f"  Type: {origin_type}")
+        click.echo(f"  Pages: {page_count}")
+        click.echo(f"  Elements: {element_count}")
+        click.echo(f"  With text: {text_count}")
+        click.echo(f"  Output: {output_path}")
+
+    except ImportError as e:
+        raise click.ClickException(
+            f"Layout extraction requires additional dependencies.\n"
+            f"Install with: pip install doc2json[layout]\n\n"
+            f"Details: {e}"
+        )
+    except Exception as e:
+        raise click.ClickException(str(e))
 
 
 if __name__ == "__main__":

@@ -55,13 +55,15 @@ class JSONLDestination:
 
         source_file = record.get("_source_file")
 
-        # Generate UUID for this extraction (used to link metadata)
-        extraction_id = str(uuid.uuid4())
+        # Use extraction_id from record if provided, otherwise generate one
+        extraction_id = record.get("_extraction_id") or str(uuid.uuid4())
         self._extraction_ids[source_file] = extraction_id
 
-        # Add extraction_id to record
-        output = {"_extraction_id": extraction_id, **record}
-        self._file.write(json.dumps(output) + "\n")
+        # Ensure extraction_id is in the record
+        if "_extraction_id" not in record:
+            record = {"_extraction_id": extraction_id, **record}
+
+        self._file.write(json.dumps(record) + "\n")
 
     def write_metadata(self, metadata: dict[str, Any]) -> None:
         """Write metadata to the metadata file."""
