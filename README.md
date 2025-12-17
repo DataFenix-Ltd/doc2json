@@ -1,0 +1,272 @@
+# doc2json
+
+**Your documents are unique. Your extraction tool should be too.**
+
+Every industry has documents that generic AI tools don't understand. Legal contracts with jurisdiction-specific clauses. Medical intake forms with diagnosis codes. Invoices with VAT breakdowns. Shipping manifests with customs classifications.
+
+You know the structure of your documents. doc2json lets you encode that knowledge into Pydantic schemas - then extracts exactly what you need, validated and typed.
+
+And because your documents often contain sensitive data, you choose where the AI runs: locally on your laptop, in your enterprise cloud, or via public APIs.
+
+## The Problem
+
+You've probably tried this before:
+
+**"Just use an LLM"** - You write a prompt, get back JSON... sometimes. No validation. Hallucinated fields. Different structure every time. You spend more time parsing the output than you saved.
+
+**"Use a document extraction API"** - Generic fields that don't match your domain. "Amount" when you need "VAT-exclusive subtotal". No way to capture your industry's specific terminology.
+
+**"Build it with LangChain"** - Three weeks later you have a fragile pipeline that breaks when documents vary. No schema versioning. No quality feedback. No idea which extractions need review.
+
+**"Send everything to the cloud"** - Your compliance team wants to know why patient records are going to OpenAI's servers.
+
+## The Solution
+
+doc2json is a Python CLI that turns unstructured documents into validated JSON using LLMs and Pydantic schemas.
+
+```
+Documents (PDF, Word, HTML, text)
+        ↓
+   Your Pydantic Schema (you define the fields)
+        ↓
+   LLM Extraction (provider of your choice)
+        ↓
+   Validated JSON (type-checked, structured)
+        ↓
+   Your Destination (files, databases, warehouses)
+```
+
+**You define the schema. You choose the AI. You control your data.**
+
+## Industry Examples
+
+**Legal** - Extract party names, obligations, termination clauses, governing law from contracts. Run locally with Ollama for client confidentiality.
+
+**Medical** - Parse patient intake forms into structured records: demographics, symptoms, medications, allergies. Keep PHI off public clouds.
+
+**Finance** - Pull line items, tax breakdowns, payment terms from invoices. Load directly to Snowflake for reconciliation.
+
+**Supply Chain** - Extract shipment details, HS codes, weights, origins from customs documents. Connect to your existing data warehouse.
+
+**Insurance** - Parse claims forms, policy documents, coverage details. Maintain audit trails with schema versioning.
+
+**Real Estate** - Extract property details, terms, contingencies from purchase agreements and leases.
+
+## Quick Start
+
+### 1. Install
+
+```bash
+pip install doc2json[openai]  # or [anthropic], [gemini], [all]
+```
+
+### 2. Initialize
+
+```bash
+doc2json init
+```
+
+This creates your project structure:
+```
+doc2json.yml       # Configuration
+schemas/           # Your Pydantic schemas
+sources/           # Input documents
+outputs/           # Extracted JSON
+```
+
+### 3. Define Your Schema
+
+Edit `schemas/example.py` - this is where your domain knowledge lives:
+
+```python
+__version__ = "1"
+
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import date
+
+class LineItem(BaseModel):
+    description: str = Field(description="Item or service description")
+    quantity: float = Field(description="Number of units")
+    unit_price: float = Field(description="Price per unit excluding tax")
+    vat_rate: Optional[float] = Field(default=None, description="VAT rate as decimal")
+
+class Schema(BaseModel):
+    """Invoice extraction schema."""
+    invoice_number: str = Field(description="Invoice number or reference")
+    invoice_date: date = Field(description="Date invoice was issued")
+    vendor_name: str = Field(description="Name of the vendor/seller")
+    vendor_vat_number: Optional[str] = Field(default=None, description="Vendor VAT registration")
+    line_items: list[LineItem] = Field(description="All line items on the invoice")
+    subtotal: float = Field(description="Total before tax")
+    vat_amount: Optional[float] = Field(default=None, description="Total VAT/tax amount")
+    total: float = Field(description="Final amount due")
+    currency: str = Field(description="Currency code (GBP, USD, EUR, etc.)")
+```
+
+The field descriptions guide the LLM. Nested models like `LineItem` just work.
+
+### 4. Add Documents & Run
+
+```bash
+# Put your documents in sources/example/
+doc2json run
+```
+
+Output appears in `outputs/example_<timestamp>.jsonl` - validated, structured, ready to use.
+
+## Schema Evolution
+
+Here's what makes doc2json different: **the AI helps you improve your schema**.
+
+Enable assessment in your config:
+
+```yaml
+schemas:
+  - name: invoice
+    assess: true
+```
+
+Now when you run extractions, the LLM evaluates each result and suggests missing fields it noticed in your documents:
+
+```bash
+doc2json run
+# "Noticed 'payment_terms' in 8/10 documents - consider adding to schema"
+# "Noticed 'purchase_order_number' in 6/10 documents - consider adding to schema"
+
+doc2json suggest-schema
+# Generates updated schema with new fields
+
+doc2json accept-suggestion
+# Backs up old schema (invoice_v1.py), promotes new version
+```
+
+Your schema evolves based on real data, not guesswork. Every extraction records which schema version was used for full traceability.
+
+## Privacy Tiers
+
+Your documents, your choice:
+
+| Tier | Provider | Your Data |
+|------|----------|-----------|
+| **Local** | Ollama | Never leaves your machine |
+| **Enterprise** | Azure OpenAI | Stays in your cloud tenant |
+| **Public Cloud** | Anthropic, OpenAI, Gemini, Groq | Sent to provider's servers |
+
+### Run Locally with Ollama
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.3
+```
+
+```yaml
+# doc2json.yml
+llm:
+  provider: ollama
+  model: llama3.3
+```
+
+No API keys. No data leaving your machine. No per-token costs.
+
+### Enterprise Cloud (Azure OpenAI)
+
+```yaml
+llm:
+  provider: openai
+  base_url: https://your-resource.openai.azure.com
+  api_key: ${AZURE_OPENAI_API_KEY}
+  api_version: 2024-12-01-preview
+  model: gpt-4.1
+```
+
+Data stays in your Azure tenant. Required for many compliance frameworks.
+
+### Public Cloud (Fastest, Most Accurate)
+
+```yaml
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+```
+
+Best accuracy for complex extractions. See [docs/models.md](docs/models.md) for model recommendations.
+
+## Production Connectors
+
+doc2json isn't just for prototypes. Connect to real data infrastructure:
+
+**Sources**: Local files, AWS S3, Google Drive, Azure Blob Storage
+
+**Destinations**: JSONL files, PostgreSQL, MongoDB, Snowflake, BigQuery, SQLite, MySQL
+
+```yaml
+# Example: S3 → Snowflake pipeline
+source:
+  type: s3
+  bucket: legal-documents
+  prefix: contracts/2024/
+
+destination:
+  type: snowflake
+  account: xy12345.us-east-1
+  user: ${SNOWFLAKE_USER}
+  password: ${SNOWFLAKE_PASSWORD}
+  database: ANALYTICS
+  schema: RAW
+  warehouse: COMPUTE_WH
+```
+
+See [docs/reference.md](docs/reference.md) for all connector options.
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `doc2json init` | Create project structure |
+| `doc2json run` | Extract data from documents |
+| `doc2json run --dry-run` | Preview without calling the LLM (cost estimate) |
+| `doc2json test` | Validate configuration and schemas |
+| `doc2json preview` | Show the JSON schema sent to the LLM |
+| `doc2json suggest-schema` | Generate schema improvements from feedback |
+| `doc2json accept-suggestion` | Apply suggested schema (with version backup) |
+
+## Why doc2json?
+
+**Schema-first** - Pydantic models with type hints and validation. No more hoping the JSON looks right.
+
+**Domain-specific** - Your schema encodes your domain knowledge. Extract exactly what matters to your business.
+
+**Privacy-conscious** - Run locally, in your enterprise cloud, or via public APIs. You decide.
+
+**Self-improving** - The assessment loop discovers fields you missed. Your schema evolves with your data.
+
+**Production-ready** - Real connectors to real infrastructure. Metadata tracking. Schema versioning.
+
+**Open source** - MIT licensed. No vendor lock-in. See exactly what it does.
+
+## Installation Options
+
+```bash
+# Core + LLM provider
+pip install doc2json[anthropic]    # Claude
+pip install doc2json[openai]       # OpenAI, Azure, Groq, Together, Ollama
+pip install doc2json[gemini]       # Google Gemini
+pip install doc2json[all]          # All providers
+
+# Add connectors as needed
+pip install doc2json[s3]           # AWS S3 source
+pip install doc2json[snowflake]    # Snowflake destination
+pip install doc2json[postgres]     # PostgreSQL destination
+pip install doc2json[sql]          # Generic SQL (MySQL, SQLite, etc.)
+```
+
+## Documentation
+
+- **[Reference Guide](docs/reference.md)** - Full configuration options, all connectors, file format support
+- **[Model Selection](docs/models.md)** - Choosing the right LLM provider for your use case
+
+## License
+
+MIT - Use it however you want.

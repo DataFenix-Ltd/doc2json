@@ -1,0 +1,66 @@
+# doc2json Configuration
+# Schema name determines all paths by convention:
+#   schemas/<name>.py, sources/<name>/, outputs/<name>.jsonl
+
+schemas:
+  - name: invoice
+    # assess: true  # Enable to get schema improvement suggestions
+
+# Destination (default: JSONL files)
+destination:
+  type: jsonl
+
+# Alternative destinations (uncomment one):
+
+# destination:
+#   type: postgres
+#   host: localhost
+#   port: 5432
+#   database: extractions
+#   user: myuser
+#   password: ${POSTGRES_PASSWORD}
+
+# destination:
+#   type: snowflake
+#   account: xy12345.us-east-1
+#   user: ${SNOWFLAKE_USER}
+#   password: ${SNOWFLAKE_PASSWORD}
+#   database: ANALYTICS
+#   schema: RAW
+#   warehouse: COMPUTE_WH
+
+# destination:
+#   type: mongodb
+#   connection_string: mongodb://localhost:27017
+#   database: extractions
+
+# destination:
+#   type: bigquery
+#   project_id: my-gcp-project
+#   dataset_id: extractions
+
+# destination:
+#   type: sql
+#   connection_string: sqlite:///outputs/extractions.db
+
+# LLM Provider
+# Groq (free tier) - recommended for getting started
+llm:
+  provider: openai
+  base_url: https://api.groq.com/openai/v1
+  api_key: ${GROQ_API_KEY}
+  model: llama-3.3-70b-versatile
+
+# Alternative providers (uncomment one):
+
+# llm:
+#   provider: anthropic
+#   model: claude-sonnet-4-20250514
+
+# llm:
+#   provider: openai
+#   model: gpt-4.1
+
+# llm:
+#   provider: ollama
+#   model: llama3.3
