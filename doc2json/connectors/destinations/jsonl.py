@@ -17,12 +17,13 @@ class JSONLDestination:
             path: Output file path (required)
             timestamp: Whether to add timestamp suffix to filename (default: True)
         """
-        base_path = Path(config.get("path", ""))
-        if not base_path:
+        path_str = config.get("path", "")
+        if not path_str:
             raise ValueError("JSONLDestination requires 'path' in config")
+        base_path = Path(path_str)
 
-        # Add timestamp suffix to avoid overwriting previous runs
-        if config.get("timestamp", True):
+        # Optionally add timestamp suffix to keep history of runs
+        if config.get("timestamp", False):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # Insert timestamp before .jsonl extension
             stem = base_path.stem  # e.g., "invoice"

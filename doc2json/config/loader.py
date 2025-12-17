@@ -124,13 +124,22 @@ class Config:
         return SourceConfig(type="local", config={"path": schema_config.sources_path})
 
     def get_destination_config(self, schema_config: SchemaConfig) -> DestinationConfig:
-        """Get effective destination config for a schema (schema override or global)."""
-        if schema_config.destination:
-            return schema_config.destination
-        if self.destination:
-            return self.destination
-        # Default: JSONL destination with convention path
-        return DestinationConfig(type="jsonl", config={"path": schema_config.output_path})
+        """Get effective destination config for a schema (schema override or global).
+
+        For JSONL destinations, applies convention-based path if none specified.
+        """
+        dest = schema_config.destination or self.destination
+
+        if dest is None:
+            # No destination configured - use JSONL with convention path
+            return DestinationConfig(type="jsonl", config={"path": schema_config.output_path})
+
+        # For JSONL, apply convention path if not explicitly set
+        if dest.type == "jsonl" and not dest.config.get("path"):
+            config_with_path = {"path": schema_config.output_path, **dest.config}
+            return DestinationConfig(type="jsonl", config=config_with_path)
+
+        return dest
 
 
 DEFAULT_CONFIG = """# doc2json Configuration
