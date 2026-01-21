@@ -3,6 +3,7 @@
 #   schemas/<name>.py, sources/<name>/, outputs/<name>.jsonl
 
 schemas:
+  - name: new-invoice
   - name: invoice
     # assess: true  # Enable to get schema improvement suggestions
 
