@@ -103,10 +103,18 @@ class SchemaTool:
         
         # Connect to source and destination using context managers
         with source, destination:
-            self.logger.info("Processing documents from source...")
+            # Check for documents first (Pre-flight check)
+            all_documents = list(source.iter_documents())
+            if not all_documents:
+                self.logger.warning(f"No documents found in source for schema '{schema_name}'.")
+                click.echo(f"⚠️  Warning: No documents found in source: {source_config.config.get('path', 'unknown')}")
+                click.echo(f"   Add some documents or check your config.")
+                return
+
+            self.logger.info(f"Processing {len(all_documents)} documents from source...")
             
             # Process each document
-            for doc_ref in source.iter_documents():
+            for doc_ref in all_documents:
                 self.logger.info(f"Processing: {doc_ref.name}")
                 file_started = datetime.now()
                 extract_tokens = None

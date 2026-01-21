@@ -78,44 +78,27 @@ outputs/           # Extracted JSON
 
 ### 3. Define Your Schema
 
-Edit `schemas/example.py` - this is where your domain knowledge lives:
+You can let the AI design an initial schema for you:
 
-```python
-__version__ = "1"
-
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import date
-
-class LineItem(BaseModel):
-    description: str = Field(description="Item or service description")
-    quantity: float = Field(description="Number of units")
-    unit_price: float = Field(description="Price per unit excluding tax")
-    vat_rate: Optional[float] = Field(default=None, description="VAT rate as decimal")
-
-class Schema(BaseModel):
-    """Invoice extraction schema."""
-    invoice_number: str = Field(description="Invoice number or reference")
-    invoice_date: date = Field(description="Date invoice was issued")
-    vendor_name: str = Field(description="Name of the vendor/seller")
-    vendor_vat_number: Optional[str] = Field(default=None, description="Vendor VAT registration")
-    line_items: list[LineItem] = Field(description="All line items on the invoice")
-    subtotal: float = Field(description="Total before tax")
-    vat_amount: Optional[float] = Field(default=None, description="Total VAT/tax amount")
-    total: float = Field(description="Final amount due")
-    currency: str = Field(description="Currency code (GBP, USD, EUR, etc.)")
+```bash
+doc2json define my_document --sample sources/example/sample.pdf
 ```
 
-The field descriptions guide the LLM. Nested models like `LineItem` just work.
+This will guide you through:
+1.  **Archetype choice**: (Invoice, Contract, etc.)
+2.  **Naming & Context**: (e.g., "UK Property Law")
+3.  **Preview**: See the generated Pydantic code before saving.
 
-### 4. Add Documents & Run
+Or, you can manually edit `schemas/example.py`. The field descriptions guide the LLM. Nested models just work.
+
+### 4. Extract Your Data
 
 ```bash
 # Put your documents in sources/example/
-doc2json run
+doc2json extract
 ```
 
-Output appears in `outputs/example_<timestamp>.jsonl` - validated, structured, ready to use.
+Output appears in `outputs/example.jsonl` - validated, structured, ready to use.
 
 ## Schema Evolution
 
@@ -132,14 +115,14 @@ schemas:
 Now when you run extractions, the LLM evaluates each result and suggests missing fields it noticed in your documents:
 
 ```bash
-doc2json run
+doc2json extract --assess
 # "Noticed 'payment_terms' in 8/10 documents - consider adding to schema"
 # "Noticed 'purchase_order_number' in 6/10 documents - consider adding to schema"
 
-doc2json suggest-schema
-# Generates updated schema with new fields
+doc2json improve
+# Generates updated schema (schemas/invoice_suggested.py)
 
-doc2json accept-suggestion
+doc2json apply
 # Backs up old schema (invoice_v1.py), promotes new version
 ```
 
@@ -226,13 +209,14 @@ See [docs/reference.md](docs/reference.md) for all connector options.
 
 | Command | What it does |
 |---------|--------------|
-| `doc2json init` | Create project structure |
-| `doc2json run` | Extract data from documents |
-| `doc2json run --dry-run` | Preview without calling the LLM (cost estimate) |
-| `doc2json test` | Validate configuration and schemas |
+| `doc2json init` | Create project structure & configure provider |
+| `doc2json define` | LLM-powered interactive schema design |
+| `doc2json extract` | Extract validated data from documents |
+| `doc2json extract --dry-run` | Preview without calling the LLM |
+| `doc2json validate` | Check configuration and schema consistency |
 | `doc2json preview` | Show the JSON schema sent to the LLM |
-| `doc2json suggest-schema` | Generate schema improvements from feedback |
-| `doc2json accept-suggestion` | Apply suggested schema (with version backup) |
+| `doc2json improve` | Generate schema updates from feedback |
+| `doc2json apply` | Apply suggested schema (with versioning) |
 
 ## Why doc2json?
 
